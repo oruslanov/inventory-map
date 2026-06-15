@@ -388,14 +388,22 @@ async function geocodeAddress(address, cache) {
         await sleep(300);
         return coords;
       }
-    } catch (error) {
-      await sleep(700);
+} catch (error) {
+  await sleep(700);
 
-      throw new Error(
-        "Ошибка Яндекс-геокодера. Проверь, что ключ разрешён для домена GitHub Pages и подключён к JavaScript API and Geocoder."
-      );
-    }
-  }
+  console.error("YANDEX GEOCODER ERROR:", error);
+
+  const message =
+    error?.message ||
+    error?.name ||
+    JSON.stringify(error, Object.getOwnPropertyNames(error)) ||
+    String(error);
+
+  throw new Error(
+    `Ошибка Яндекс-геокодера по запросу "${query}". Реальная ошибка: ${message}`
+  );
+}
+}
 
   throw new Error(`Адрес не найден Яндекс-геокодером. Пробовал: ${tried.join(" | ")}`);
 }
