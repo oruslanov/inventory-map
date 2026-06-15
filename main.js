@@ -391,17 +391,19 @@ async function geocodeAddress(address, cache) {
 } catch (error) {
   await sleep(700);
 
-  console.error("YANDEX GEOCODER ERROR:", error);
+  console.error("YANDEX GEOCODER ERROR:", {
+    query,
+    error
+  });
 
   const message =
     error?.message ||
     error?.name ||
-    JSON.stringify(error, Object.getOwnPropertyNames(error)) ||
     String(error);
 
-  throw new Error(
-    `Ошибка Яндекс-геокодера по запросу "${query}". Реальная ошибка: ${message}`
-  );
+  tried.push(`ОШИБКА на "${query}": ${message}`);
+
+  continue;
 }
 }
 
