@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Карта инвентаризаций F2</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="panel">
+    <h1>Карта инвентаризаций F2</h1>
+
+    <label>
+      API-ключ Яндекс.Карт
+      <input id="yandexKey" type="text" placeholder="Вставь ключ Яндекс.Карт" />
+    </label>
+
+    <label>
+      Статус инвентаризации
+      <select id="statusFilter">
+        <option value="opergroup_survey" selected>Только opergroup_survey</option>
+        <option value="primary_survey">Только primary_survey</option>
+        <option value="primary_approval">Только primary_approval</option>
+        <option value="act_signing">Только act_signing</option>
+        <option value="documents_transferred">Только documents_transferred</option>
+        <option value="document_preparation">Только document_preparation</option>
+        <option value="object_setup">Только object_setup</option>
+        <option value="paused">Только paused</option>
+        <option value="">Все статусы</option>
+      </select>
+    </label>
+
+    <label>
+      Или свой status вручную
+      <input id="customStatusFilter" type="text" placeholder="Например: opergroup_survey" />
+    </label>
+
+    <label>
+      JSON-ответ из запроса /api/inventories
+      <textarea id="jsonInput" rows="12" placeholder="Сюда вставь Response из DevTools запроса https://inventory.f2c.ru/api/inventories"></textarea>
+    </label>
+
+    <div class="buttons">
+      <button id="loadBtn">Построить карту</button>
+      <button id="clearCacheBtn">Очистить кэш координат</button>
+      <button id="clearJsonBtn">Очистить JSON</button>
+    </div>
+
+    <div id="status">Готово. Вставь JSON из DevTools и нажми «Построить карту».</div>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="main.js"></script>
+</body>
+</html>
