@@ -17,6 +17,7 @@ const LAST_JSON_KEY = "inventory_f2c_last_json_v1";
 const LAST_YANDEX_KEY = "inventory_f2c_last_yandex_key_v1";
 const LAST_MARK_FILTER_KEY = "inventory_f2c_last_mark_filter_v1";
 const INVENTORY_MARKS_KEY = "inventory_f2c_user_marks_v1";
+const INVENTORY_COMMENTS_KEY = "inventory_f2c_user_comments_v1";
 
 window.addEventListener("DOMContentLoaded", () => {
   jsonInput.value = localStorage.getItem(LAST_JSON_KEY) || "";
@@ -113,6 +114,66 @@ function loadMarks() {
 function saveMarks(marks) {
   localStorage.setItem(INVENTORY_MARKS_KEY, JSON.stringify(marks));
 }
+
+function loadComments() {
+  try {
+    return JSON.parse(localStorage.getItem(INVENTORY_COMMENTS_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveComments(comments) {
+  localStorage.setItem(INVENTORY_COMMENTS_KEY, JSON.stringify(comments));
+}
+
+function getInventoryComment(item) {
+  const comments = loadComments();
+  const key = getInventoryKey(item);
+
+  return comments[key] || "";
+}
+
+function makeSafeDomId(value) {
+  return String(value ?? "")
+    .replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+window.saveInventoryComment = function saveInventoryComment(key) {
+  const comments = loadComments();
+  const commentInput = document.getElementById(`comment_${makeSafeDomId(key)}`);
+
+  if (!commentInput) {
+    setStatus("Не нашёл поле комментария в открытой карточке.");
+    return;
+  }
+
+  const value = commentInput.value.trim();
+
+  if (value) {
+    comments[key] = value;
+  } else {
+    delete comments[key];
+  }
+
+  saveComments(comments);
+
+  setStatus("Комментарий сохранён.");
+};
+
+window.deleteInventoryComment = function deleteInventoryComment(key) {
+  const comments = loadComments();
+  const commentInput = document.getElementById(`comment_${makeSafeDomId(key)}`);
+
+  delete comments[key];
+  saveComments(comments);
+
+  if (commentInput) {
+    commentInput.value = "";
+  }
+
+  setStatus("Комментарий удалён.");
+};
 
 function getInventoryKey(item) {
   if (item.id) {
@@ -645,17 +706,29 @@ function getPlacemarkPreset(item) {
 
 function makeBalloonContent(item) {
   const yandexRouteUrl = `https://yandex.ru/maps/?rtext=~${encodeURIComponent(item.address)}&rtt=auto`;
+  const inventoryUrl = item.id
+    ? `https://inventory.f2c.ru/cabinet/inventories/${encodeURIComponent(item.id)}`
+    : "";
+
   const key = getInventoryKey(item);
   const safeKey = escapeJsString(key);
+  const commentDomId = `comment_${makeSafeDomId(key)}`;
   const currentMark = getInventoryMark(item);
+  const currentComment = getInventoryComment(item);
 
   const photoBlock = item.facadePhotoUrl
     ? `<p><a href="${escapeHtml(item.facadePhotoUrl)}" target="_blank">Фото фасада</a></p>`
     : "";
 
+  const inventoryLinkBlock = inventoryUrl
+    ? `<p><a href="${escapeHtml(inventoryUrl)}" target="_blank">Открыть в inventory</a></p>`
+    : "";
+
   return `
     <div class="balloon">
       <h3>${escapeHtml(item.inventoryNumber ? `№ ${item.inventoryNumber}` : item.name)}</h3>
+
+      ${inventoryLinkBlock}
 
       <p><b>Моя пометка:</b> ${escapeHtml(getMarkName(currentMark))}</p>
 
@@ -666,6 +739,19 @@ function makeBalloonContent(item) {
         <button class="mark-gray" type="button" onclick="setInventoryMark('${safeKey}', 'gray')">Серый</button>
         <button class="mark-hidden" type="button" onclick="setInventoryMark('${safeKey}', 'hidden')">Скрыть</button>
         <button class="mark-reset" type="button" onclick="resetInventoryMark('${safeKey}')">Сбросить</button>
+      </div>
+
+      <p><b>Мой комментарий:</b></p>
+      <textarea
+        id="${escapeHtml(commentDomId)}"
+        class="balloon-comment"
+        rows="4"
+        placeholder="Например: созвониться, проверить доступ, проблемный объект..."
+      >${escapeHtml(currentComment)}</textarea>
+
+      <div class="balloon-comment-buttons">
+        <button type="button" onclick="saveInventoryComment('${safeKey}')">Сохранить комментарий</button>
+        <button type="button" onclick="deleteInventoryComment('${safeKey}')">Удалить</button>
       </div>
 
       <p><b>Статус:</b> ${escapeHtml(getStatusName(item.status))}</p>

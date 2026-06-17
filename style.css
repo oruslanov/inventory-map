@@ -135,3 +135,29 @@ button:hover {
 .mark-reset {
   background: #444444;
 }
+
+.balloon-comment {
+  width: 100%;
+  min-height: 80px;
+  margin: 4px 0 8px;
+  padding: 7px;
+  font-size: 13px;
+  line-height: 1.35;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  resize: vertical;
+  font-family: Arial, sans-serif;
+}
+
+.balloon-comment-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.balloon-comment-buttons button {
+  padding: 6px 8px;
+  font-size: 12px;
+  border-radius: 5px;
+}
