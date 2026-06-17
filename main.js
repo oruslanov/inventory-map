@@ -1,6 +1,9 @@
 let map = null;
 let clusterer = null;
 
+const placemarksByKey = new Map();
+const itemsByKey = new Map();
+
 const yandexKeyInput = document.getElementById("yandexKey");
 const statusFilterInput = document.getElementById("statusFilter");
 const customStatusFilterInput = document.getElementById("customStatusFilter");
@@ -10,6 +13,9 @@ const loadBtn = document.getElementById("loadBtn");
 const clearCacheBtn = document.getElementById("clearCacheBtn");
 const clearJsonBtn = document.getElementById("clearJsonBtn");
 const clearMarksBtn = document.getElementById("clearMarksBtn");
+const exportMemoryBtn = document.getElementById("exportMemoryBtn");
+const importMemoryBtn = document.getElementById("importMemoryBtn");
+const importMemoryInput = document.getElementById("importMemoryInput");
 const statusBox = document.getElementById("status");
 
 const GEOCODE_CACHE_KEY = "inventory_f2c_yandex_geocode_cache_github_pages_v1";
@@ -44,17 +50,19 @@ clearJsonBtn.addEventListener("click", () => {
 });
 
 clearMarksBtn.addEventListener("click", () => {
-  const confirmed = confirm("Точно сбросить все твои цветные пометки и скрытые адреса?");
+  const confirmed = confirm("Точно сбросить все твои цветные пометки и скрытые адреса? Комментарии останутся.");
 
   if (!confirmed) {
     return;
   }
 
   localStorage.removeItem(INVENTORY_MARKS_KEY);
-  setStatus("Все мои пометки сброшены.");
+  setStatus("Все мои цветные пометки сброшены. Комментарии не удалялись.");
+
+  refreshAllVisibleMarkers();
 
   if (jsonInput.value.trim()) {
-    loadInventoryMap();
+    updateStatusAfterQuickChange("Пометки сброшены.");
   }
 });
 
@@ -64,6 +72,23 @@ markFilterInput.addEventListener("change", () => {
   if (jsonInput.value.trim()) {
     loadInventoryMap();
   }
+});
+
+exportMemoryBtn.addEventListener("click", exportMemoryToJson);
+
+importMemoryBtn.addEventListener("click", () => {
+  importMemoryInput.click();
+});
+
+importMemoryInput.addEventListener("change", event => {
+  const file = event.target.files && event.target.files[0];
+
+  if (!file) {
+    return;
+  }
+
+  importMemoryFromJsonFile(file);
+  importMemoryInput.value = "";
 });
 
 function setStatus(text) {
@@ -91,89 +116,46 @@ function escapeJsString(value) {
     .replace(/\r/g, "");
 }
 
-function loadCache() {
-  try {
-    return JSON.parse(localStorage.getItem(GEOCODE_CACHE_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveCache(cache) {
-  localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(cache));
-}
-
-function loadMarks() {
-  try {
-    return JSON.parse(localStorage.getItem(INVENTORY_MARKS_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveMarks(marks) {
-  localStorage.setItem(INVENTORY_MARKS_KEY, JSON.stringify(marks));
-}
-
-function loadComments() {
-  try {
-    return JSON.parse(localStorage.getItem(INVENTORY_COMMENTS_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveComments(comments) {
-  localStorage.setItem(INVENTORY_COMMENTS_KEY, JSON.stringify(comments));
-}
-
-function getInventoryComment(item) {
-  const comments = loadComments();
-  const key = getInventoryKey(item);
-
-  return comments[key] || "";
-}
-
 function makeSafeDomId(value) {
   return String(value ?? "")
     .replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
-window.saveInventoryComment = function saveInventoryComment(key) {
-  const comments = loadComments();
-  const commentInput = document.getElementById(`comment_${makeSafeDomId(key)}`);
-
-  if (!commentInput) {
-    setStatus("Не нашёл поле комментария в открытой карточке.");
-    return;
+function loadJsonStorage(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || "{}");
+  } catch {
+    return {};
   }
+}
 
-  const value = commentInput.value.trim();
+function saveJsonStorage(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
 
-  if (value) {
-    comments[key] = value;
-  } else {
-    delete comments[key];
-  }
+function loadCache() {
+  return loadJsonStorage(GEOCODE_CACHE_KEY);
+}
 
-  saveComments(comments);
+function saveCache(cache) {
+  saveJsonStorage(GEOCODE_CACHE_KEY, cache);
+}
 
-  setStatus("Комментарий сохранён.");
-};
+function loadMarks() {
+  return loadJsonStorage(INVENTORY_MARKS_KEY);
+}
 
-window.deleteInventoryComment = function deleteInventoryComment(key) {
-  const comments = loadComments();
-  const commentInput = document.getElementById(`comment_${makeSafeDomId(key)}`);
+function saveMarks(marks) {
+  saveJsonStorage(INVENTORY_MARKS_KEY, marks);
+}
 
-  delete comments[key];
-  saveComments(comments);
+function loadComments() {
+  return loadJsonStorage(INVENTORY_COMMENTS_KEY);
+}
 
-  if (commentInput) {
-    commentInput.value = "";
-  }
-
-  setStatus("Комментарий удалён.");
-};
+function saveComments(comments) {
+  saveJsonStorage(INVENTORY_COMMENTS_KEY, comments);
+}
 
 function getInventoryKey(item) {
   if (item.id) {
@@ -194,12 +176,27 @@ function getInventoryMark(item) {
   return marks[key] || "";
 }
 
+function getInventoryComment(item) {
+  const comments = loadComments();
+  const key = getInventoryKey(item);
+
+  return comments[key] || "";
+}
+
 function getMarkName(mark) {
   const names = {
     green: "Зелёная",
+    darkGreen: "Тёмно-зелёная",
     yellow: "Жёлтая",
+    orange: "Оранжевая",
     red: "Красная",
+    blue: "Синяя",
+    darkBlue: "Тёмно-синяя",
+    violet: "Фиолетовая",
+    pink: "Розовая",
+    brown: "Коричневая",
     gray: "Серая",
+    black: "Чёрная",
     hidden: "Скрыта"
   };
 
@@ -209,9 +206,17 @@ function getMarkName(mark) {
 function getMarkPreset(mark) {
   const presets = {
     green: "islands#greenDotIcon",
+    darkGreen: "islands#darkGreenDotIcon",
     yellow: "islands#yellowDotIcon",
+    orange: "islands#orangeDotIcon",
     red: "islands#redDotIcon",
+    blue: "islands#blueDotIcon",
+    darkBlue: "islands#darkBlueDotIcon",
+    violet: "islands#violetDotIcon",
+    pink: "islands#pinkDotIcon",
+    brown: "islands#brownDotIcon",
     gray: "islands#grayDotIcon",
+    black: "islands#blackDotIcon",
     hidden: "islands#blackDotIcon"
   };
 
@@ -238,9 +243,17 @@ function makeMarkStats(inventories) {
   const stats = {
     unmarked: 0,
     green: 0,
+    darkGreen: 0,
     yellow: 0,
+    orange: 0,
     red: 0,
+    blue: 0,
+    darkBlue: 0,
+    violet: 0,
+    pink: 0,
+    brown: 0,
     gray: 0,
+    black: 0,
     hidden: 0
   };
 
@@ -257,29 +270,90 @@ function makeMarkStats(inventories) {
   return [
     `без пометки: ${stats.unmarked}`,
     `зелёные: ${stats.green}`,
+    `тёмно-зелёные: ${stats.darkGreen}`,
     `жёлтые: ${stats.yellow}`,
+    `оранжевые: ${stats.orange}`,
     `красные: ${stats.red}`,
+    `синие: ${stats.blue}`,
+    `тёмно-синие: ${stats.darkBlue}`,
+    `фиолетовые: ${stats.violet}`,
+    `розовые: ${stats.pink}`,
+    `коричневые: ${stats.brown}`,
     `серые: ${stats.gray}`,
+    `чёрные: ${stats.black}`,
     `скрытые: ${stats.hidden}`
   ].join("\n");
 }
 
 window.setInventoryMark = function setInventoryMark(key, mark) {
+  const item = itemsByKey.get(key);
   const marks = loadMarks();
 
   marks[key] = mark;
   saveMarks(marks);
 
-  loadInventoryMap();
+  updateSingleMarkerAfterUserDataChange(key);
+
+  if (item) {
+    setStatus(`Пометка сохранена: ${getMarkName(mark)}\n${item.address}`);
+  } else {
+    setStatus(`Пометка сохранена: ${getMarkName(mark)}`);
+  }
 };
 
 window.resetInventoryMark = function resetInventoryMark(key) {
+  const item = itemsByKey.get(key);
   const marks = loadMarks();
 
   delete marks[key];
   saveMarks(marks);
 
-  loadInventoryMap();
+  updateSingleMarkerAfterUserDataChange(key);
+
+  if (item) {
+    setStatus(`Пометка сброшена.\n${item.address}`);
+  } else {
+    setStatus("Пометка сброшена.");
+  }
+};
+
+window.saveInventoryComment = function saveInventoryComment(key) {
+  const comments = loadComments();
+  const commentInput = document.getElementById(`comment_${makeSafeDomId(key)}`);
+
+  if (!commentInput) {
+    setStatus("Не нашёл поле комментария в открытой карточке.");
+    return;
+  }
+
+  const value = commentInput.value.trim();
+
+  if (value) {
+    comments[key] = value;
+  } else {
+    delete comments[key];
+  }
+
+  saveComments(comments);
+  updateSingleMarkerAfterUserDataChange(key);
+
+  setStatus("Комментарий сохранён.");
+};
+
+window.deleteInventoryComment = function deleteInventoryComment(key) {
+  const comments = loadComments();
+  const commentInput = document.getElementById(`comment_${makeSafeDomId(key)}`);
+
+  delete comments[key];
+  saveComments(comments);
+
+  if (commentInput) {
+    commentInput.value = "";
+  }
+
+  updateSingleMarkerAfterUserDataChange(key);
+
+  setStatus("Комментарий удалён.");
 };
 
 function getSelectedStatus() {
@@ -636,6 +710,8 @@ function initMap() {
     map.destroy();
   }
 
+  placemarksByKey.clear();
+
   map = new window.ymaps.Map("map", {
     center: [55.751244, 37.618423],
     zoom: 10,
@@ -704,6 +780,12 @@ function getPlacemarkPreset(item) {
   return "islands#violetDotIcon";
 }
 
+function getItemTitle(item) {
+  return item.inventoryNumber
+    ? `№ ${item.inventoryNumber}`
+    : item.name || item.organizationName || item.address;
+}
+
 function makeBalloonContent(item) {
   const yandexRouteUrl = `https://yandex.ru/maps/?rtext=~${encodeURIComponent(item.address)}&rtt=auto`;
   const inventoryUrl = item.id
@@ -726,7 +808,7 @@ function makeBalloonContent(item) {
 
   return `
     <div class="balloon">
-      <h3>${escapeHtml(item.inventoryNumber ? `№ ${item.inventoryNumber}` : item.name)}</h3>
+      <h3>${escapeHtml(getItemTitle(item))}</h3>
 
       ${inventoryLinkBlock}
 
@@ -734,9 +816,17 @@ function makeBalloonContent(item) {
 
       <div class="balloon-mark-buttons">
         <button class="mark-green" type="button" onclick="setInventoryMark('${safeKey}', 'green')">Зелёный</button>
+        <button class="mark-darkGreen" type="button" onclick="setInventoryMark('${safeKey}', 'darkGreen')">Тёмно-зелёный</button>
         <button class="mark-yellow" type="button" onclick="setInventoryMark('${safeKey}', 'yellow')">Жёлтый</button>
+        <button class="mark-orange" type="button" onclick="setInventoryMark('${safeKey}', 'orange')">Оранжевый</button>
         <button class="mark-red" type="button" onclick="setInventoryMark('${safeKey}', 'red')">Красный</button>
+        <button class="mark-blue" type="button" onclick="setInventoryMark('${safeKey}', 'blue')">Синий</button>
+        <button class="mark-darkBlue" type="button" onclick="setInventoryMark('${safeKey}', 'darkBlue')">Тёмно-синий</button>
+        <button class="mark-violet" type="button" onclick="setInventoryMark('${safeKey}', 'violet')">Фиолетовый</button>
+        <button class="mark-pink" type="button" onclick="setInventoryMark('${safeKey}', 'pink')">Розовый</button>
+        <button class="mark-brown" type="button" onclick="setInventoryMark('${safeKey}', 'brown')">Коричневый</button>
         <button class="mark-gray" type="button" onclick="setInventoryMark('${safeKey}', 'gray')">Серый</button>
+        <button class="mark-black" type="button" onclick="setInventoryMark('${safeKey}', 'black')">Чёрный</button>
         <button class="mark-hidden" type="button" onclick="setInventoryMark('${safeKey}', 'hidden')">Скрыть</button>
         <button class="mark-reset" type="button" onclick="resetInventoryMark('${safeKey}')">Сбросить</button>
       </div>
@@ -788,6 +878,151 @@ function makeStatusStats(inventories) {
     .join("\n");
 }
 
+function isItemAllowedByCurrentMarkFilter(item) {
+  const selectedMarkFilter = markFilterInput.value;
+
+  return filterInventoriesByMark([item], selectedMarkFilter).length > 0;
+}
+
+function updateSingleMarkerAfterUserDataChange(key) {
+  const item = itemsByKey.get(key);
+  const placemark = placemarksByKey.get(key);
+
+  if (!item || !placemark || !clusterer) {
+    return;
+  }
+
+  if (!isItemAllowedByCurrentMarkFilter(item)) {
+    clusterer.remove(placemark);
+    placemarksByKey.delete(key);
+    return;
+  }
+
+  placemark.options.set("preset", getPlacemarkPreset(item));
+  placemark.properties.set("hintContent", `${getItemTitle(item)} — ${getStatusName(item.status)} — ${getMarkName(getInventoryMark(item))}`);
+  placemark.properties.set("balloonContent", makeBalloonContent(item));
+  placemark.properties.set("clusterCaption", getItemTitle(item));
+}
+
+function refreshAllVisibleMarkers() {
+  for (const [key] of placemarksByKey) {
+    updateSingleMarkerAfterUserDataChange(key);
+  }
+}
+
+function updateStatusAfterQuickChange(prefix) {
+  const allItems = [...itemsByKey.values()];
+  const selectedStatus = getSelectedStatus();
+  const selectedMarkFilter = markFilterInput.value;
+  const statusFilteredInventories = filterInventoriesByStatus(allItems, selectedStatus);
+  const filteredInventories = filterInventoriesByMark(statusFilteredInventories, selectedMarkFilter);
+
+  setStatus(
+    `${prefix}\n\n` +
+    `Всего адресов в памяти: ${allItems.length}\n` +
+    `Фильтр status: ${selectedStatus || "Все статусы"}\n` +
+    `После status-фильтра: ${statusFilteredInventories.length}\n` +
+    `Фильтр пометок: ${selectedMarkFilter || "Все, включая скрытые"}\n` +
+    `После фильтра пометок: ${filteredInventories.length}\n\n` +
+    `Мои пометки после status-фильтра:\n${makeMarkStats(statusFilteredInventories)}`
+  );
+}
+
+function exportMemoryToJson() {
+  const backup = {
+    app: "inventory-map",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    warning: "Файл может содержать приватные адреса и личные комментарии. Не публикуй его в GitHub.",
+    data: {
+      marks: loadMarks(),
+      comments: loadComments(),
+      geocodeCache: loadCache(),
+      lastMarkFilter: localStorage.getItem(LAST_MARK_FILTER_KEY) || markFilterInput.value || "active"
+    }
+  };
+
+  const json = JSON.stringify(backup, null, 2);
+  const blob = new Blob([json], {
+    type: "application/json;charset=utf-8"
+  });
+
+  const date = new Date();
+  const fileName =
+    `inventory-map-memory-${date.getFullYear()}-` +
+    `${String(date.getMonth() + 1).padStart(2, "0")}-` +
+    `${String(date.getDate()).padStart(2, "0")}.json`;
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  URL.revokeObjectURL(url);
+
+  setStatus("Память выгружена в JSON. Храни файл у себя, он может содержать адреса и комментарии.");
+}
+
+function importMemoryFromJsonFile(file) {
+  const reader = new FileReader();
+
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(String(reader.result || ""));
+      const data = parsed.data || parsed;
+
+      const confirmed = confirm(
+        "Загрузить память из JSON?\n\n" +
+        "Текущие цвета, комментарии и кэш координат будут заменены данными из файла."
+      );
+
+      if (!confirmed) {
+        setStatus("Импорт отменён.");
+        return;
+      }
+
+      if (data.marks && typeof data.marks === "object") {
+        saveMarks(data.marks);
+      } else {
+        localStorage.removeItem(INVENTORY_MARKS_KEY);
+      }
+
+      if (data.comments && typeof data.comments === "object") {
+        saveComments(data.comments);
+      } else {
+        localStorage.removeItem(INVENTORY_COMMENTS_KEY);
+      }
+
+      if (data.geocodeCache && typeof data.geocodeCache === "object") {
+        saveCache(data.geocodeCache);
+      }
+
+      if (typeof data.lastMarkFilter === "string") {
+        markFilterInput.value = data.lastMarkFilter;
+        localStorage.setItem(LAST_MARK_FILTER_KEY, data.lastMarkFilter);
+      }
+
+      setStatus("Память импортирована из JSON.");
+
+      if (jsonInput.value.trim()) {
+        loadInventoryMap();
+      }
+    } catch (error) {
+      setStatus("Ошибка импорта JSON:\n" + error.message);
+    }
+  };
+
+  reader.onerror = () => {
+    setStatus("Не удалось прочитать файл.");
+  };
+
+  reader.readAsText(file, "utf-8");
+}
+
 async function loadInventoryMap() {
   try {
     const yandexKey = yandexKeyInput.value.trim();
@@ -810,6 +1045,13 @@ async function loadInventoryMap() {
     await loadYandexMaps(yandexKey);
 
     const allInventories = extractInventories(apiData);
+
+    itemsByKey.clear();
+
+    for (const item of allInventories) {
+      itemsByKey.set(getInventoryKey(item), item);
+    }
+
     const statusFilteredInventories = filterInventoriesByStatus(allInventories, selectedStatus);
     const filteredInventories = filterInventoriesByMark(statusFilteredInventories, selectedMarkFilter);
 
@@ -855,22 +1097,20 @@ async function loadInventoryMap() {
           coords = await geocodeAddress(item.address, cache);
         }
 
-        const title = item.inventoryNumber
-          ? `№ ${item.inventoryNumber}`
-          : item.name || item.organizationName || item.address;
-
+        const key = getInventoryKey(item);
         const placemark = new window.ymaps.Placemark(
           coords,
           {
-            hintContent: `${title} — ${getStatusName(item.status)} — ${getMarkName(getInventoryMark(item))}`,
+            hintContent: `${getItemTitle(item)} — ${getStatusName(item.status)} — ${getMarkName(getInventoryMark(item))}`,
             balloonContent: makeBalloonContent(item),
-            clusterCaption: title
+            clusterCaption: getItemTitle(item)
           },
           {
             preset: getPlacemarkPreset(item)
           }
         );
 
+        placemarksByKey.set(key, placemark);
         placemarks.push(placemark);
       } catch (error) {
         failed.push({

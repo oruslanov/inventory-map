@@ -41,9 +41,17 @@
         <option value="">Все, включая скрытые</option>
         <option value="unmarked">Только без пометки</option>
         <option value="green">Только зелёные</option>
+        <option value="darkGreen">Только тёмно-зелёные</option>
         <option value="yellow">Только жёлтые</option>
+        <option value="orange">Только оранжевые</option>
         <option value="red">Только красные</option>
+        <option value="blue">Только синие</option>
+        <option value="darkBlue">Только тёмно-синие</option>
+        <option value="violet">Только фиолетовые</option>
+        <option value="pink">Только розовые</option>
+        <option value="brown">Только коричневые</option>
         <option value="gray">Только серые</option>
+        <option value="black">Только чёрные</option>
         <option value="hidden">Только скрытые</option>
       </select>
     </label>
@@ -58,6 +66,9 @@
       <button id="clearCacheBtn">Очистить кэш координат</button>
       <button id="clearJsonBtn">Очистить JSON</button>
       <button id="clearMarksBtn">Сбросить мои пометки</button>
+      <button id="exportMemoryBtn">Выгрузить память JSON</button>
+      <button id="importMemoryBtn">Загрузить память JSON</button>
+      <input id="importMemoryInput" type="file" accept="application/json,.json" hidden />
     </div>
 
     <div id="status">Готово. Вставь JSON из DevTools и нажми «Построить карту».</div>

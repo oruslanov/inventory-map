@@ -83,7 +83,7 @@ button:hover {
 }
 
 .balloon {
-  max-width: 360px;
+  max-width: 390px;
 }
 
 .balloon h3 {
@@ -116,16 +116,48 @@ button:hover {
   background: #1f8f3a;
 }
 
+.mark-darkGreen {
+  background: #0b5d1e;
+}
+
 .mark-yellow {
   background: #b8860b;
+}
+
+.mark-orange {
+  background: #c45f00;
 }
 
 .mark-red {
   background: #b3261e;
 }
 
+.mark-blue {
+  background: #1d5fd1;
+}
+
+.mark-darkBlue {
+  background: #133b8a;
+}
+
+.mark-violet {
+  background: #6f42c1;
+}
+
+.mark-pink {
+  background: #c2185b;
+}
+
+.mark-brown {
+  background: #795548;
+}
+
 .mark-gray {
   background: #666666;
+}
+
+.mark-black {
+  background: #111111;
 }
 
 .mark-hidden {
