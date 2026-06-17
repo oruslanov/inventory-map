@@ -98,3 +98,40 @@ button:hover {
 .balloon a {
   color: #1d5fd1;
 }
+
+.balloon-mark-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 10px;
+}
+
+.balloon-mark-buttons button {
+  padding: 6px 8px;
+  font-size: 12px;
+  border-radius: 5px;
+}
+
+.mark-green {
+  background: #1f8f3a;
+}
+
+.mark-yellow {
+  background: #b8860b;
+}
+
+.mark-red {
+  background: #b3261e;
+}
+
+.mark-gray {
+  background: #666666;
+}
+
+.mark-hidden {
+  background: #111111;
+}
+
+.mark-reset {
+  background: #444444;
+}

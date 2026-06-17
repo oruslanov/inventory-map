@@ -35,6 +35,20 @@
     </label>
 
     <label>
+      Фильтр по моей пометке
+      <select id="markFilter">
+        <option value="active" selected>Все, кроме скрытых</option>
+        <option value="">Все, включая скрытые</option>
+        <option value="unmarked">Только без пометки</option>
+        <option value="green">Только зелёные</option>
+        <option value="yellow">Только жёлтые</option>
+        <option value="red">Только красные</option>
+        <option value="gray">Только серые</option>
+        <option value="hidden">Только скрытые</option>
+      </select>
+    </label>
+
+    <label>
       JSON-ответ из запроса /api/inventories
       <textarea id="jsonInput" rows="12" placeholder="Сюда вставь Response из DevTools запроса https://inventory.f2c.ru/api/inventories"></textarea>
     </label>
@@ -43,6 +57,7 @@
       <button id="loadBtn">Построить карту</button>
       <button id="clearCacheBtn">Очистить кэш координат</button>
       <button id="clearJsonBtn">Очистить JSON</button>
+      <button id="clearMarksBtn">Сбросить мои пометки</button>
     </div>
 
     <div id="status">Готово. Вставь JSON из DevTools и нажми «Построить карту».</div>

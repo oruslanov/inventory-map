@@ -4,19 +4,29 @@ let clusterer = null;
 const yandexKeyInput = document.getElementById("yandexKey");
 const statusFilterInput = document.getElementById("statusFilter");
 const customStatusFilterInput = document.getElementById("customStatusFilter");
+const markFilterInput = document.getElementById("markFilter");
 const jsonInput = document.getElementById("jsonInput");
 const loadBtn = document.getElementById("loadBtn");
 const clearCacheBtn = document.getElementById("clearCacheBtn");
 const clearJsonBtn = document.getElementById("clearJsonBtn");
+const clearMarksBtn = document.getElementById("clearMarksBtn");
 const statusBox = document.getElementById("status");
 
 const GEOCODE_CACHE_KEY = "inventory_f2c_yandex_geocode_cache_github_pages_v1";
 const LAST_JSON_KEY = "inventory_f2c_last_json_v1";
 const LAST_YANDEX_KEY = "inventory_f2c_last_yandex_key_v1";
+const LAST_MARK_FILTER_KEY = "inventory_f2c_last_mark_filter_v1";
+const INVENTORY_MARKS_KEY = "inventory_f2c_user_marks_v1";
 
 window.addEventListener("DOMContentLoaded", () => {
   jsonInput.value = localStorage.getItem(LAST_JSON_KEY) || "";
   yandexKeyInput.value = localStorage.getItem(LAST_YANDEX_KEY) || "";
+
+  const savedMarkFilter = localStorage.getItem(LAST_MARK_FILTER_KEY);
+
+  if (savedMarkFilter !== null) {
+    markFilterInput.value = savedMarkFilter;
+  }
 });
 
 loadBtn.addEventListener("click", loadInventoryMap);
@@ -30,6 +40,29 @@ clearJsonBtn.addEventListener("click", () => {
   jsonInput.value = "";
   localStorage.removeItem(LAST_JSON_KEY);
   setStatus("JSON очищен.");
+});
+
+clearMarksBtn.addEventListener("click", () => {
+  const confirmed = confirm("Точно сбросить все твои цветные пометки и скрытые адреса?");
+
+  if (!confirmed) {
+    return;
+  }
+
+  localStorage.removeItem(INVENTORY_MARKS_KEY);
+  setStatus("Все мои пометки сброшены.");
+
+  if (jsonInput.value.trim()) {
+    loadInventoryMap();
+  }
+});
+
+markFilterInput.addEventListener("change", () => {
+  localStorage.setItem(LAST_MARK_FILTER_KEY, markFilterInput.value);
+
+  if (jsonInput.value.trim()) {
+    loadInventoryMap();
+  }
 });
 
 function setStatus(text) {
@@ -49,6 +82,14 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function escapeJsString(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "");
+}
+
 function loadCache() {
   try {
     return JSON.parse(localStorage.getItem(GEOCODE_CACHE_KEY) || "{}");
@@ -60,6 +101,125 @@ function loadCache() {
 function saveCache(cache) {
   localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(cache));
 }
+
+function loadMarks() {
+  try {
+    return JSON.parse(localStorage.getItem(INVENTORY_MARKS_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveMarks(marks) {
+  localStorage.setItem(INVENTORY_MARKS_KEY, JSON.stringify(marks));
+}
+
+function getInventoryKey(item) {
+  if (item.id) {
+    return String(item.id);
+  }
+
+  if (item.inventoryNumber) {
+    return `number:${item.inventoryNumber}`;
+  }
+
+  return `address:${item.address}`;
+}
+
+function getInventoryMark(item) {
+  const marks = loadMarks();
+  const key = getInventoryKey(item);
+
+  return marks[key] || "";
+}
+
+function getMarkName(mark) {
+  const names = {
+    green: "Зелёная",
+    yellow: "Жёлтая",
+    red: "Красная",
+    gray: "Серая",
+    hidden: "Скрыта"
+  };
+
+  return names[mark] || "Без пометки";
+}
+
+function getMarkPreset(mark) {
+  const presets = {
+    green: "islands#greenDotIcon",
+    yellow: "islands#yellowDotIcon",
+    red: "islands#redDotIcon",
+    gray: "islands#grayDotIcon",
+    hidden: "islands#blackDotIcon"
+  };
+
+  return presets[mark] || "";
+}
+
+function filterInventoriesByMark(inventories, markFilter) {
+  if (markFilter === "") {
+    return inventories;
+  }
+
+  if (markFilter === "active") {
+    return inventories.filter(item => getInventoryMark(item) !== "hidden");
+  }
+
+  if (markFilter === "unmarked") {
+    return inventories.filter(item => !getInventoryMark(item));
+  }
+
+  return inventories.filter(item => getInventoryMark(item) === markFilter);
+}
+
+function makeMarkStats(inventories) {
+  const stats = {
+    unmarked: 0,
+    green: 0,
+    yellow: 0,
+    red: 0,
+    gray: 0,
+    hidden: 0
+  };
+
+  for (const item of inventories) {
+    const mark = getInventoryMark(item);
+
+    if (mark && stats[mark] !== undefined) {
+      stats[mark] += 1;
+    } else {
+      stats.unmarked += 1;
+    }
+  }
+
+  return [
+    `без пометки: ${stats.unmarked}`,
+    `зелёные: ${stats.green}`,
+    `жёлтые: ${stats.yellow}`,
+    `красные: ${stats.red}`,
+    `серые: ${stats.gray}`,
+    `скрытые: ${stats.hidden}`
+  ].join("\n");
+}
+
+window.setInventoryMark = function setInventoryMark(key, mark) {
+  const marks = loadMarks();
+
+  marks[key] = mark;
+  saveMarks(marks);
+
+  loadInventoryMap();
+};
+
+window.resetInventoryMark = function resetInventoryMark(key) {
+  const marks = loadMarks();
+
+  delete marks[key];
+  saveMarks(marks);
+
+  loadInventoryMap();
+};
 
 function getSelectedStatus() {
   const customStatus = customStatusFilterInput.value.trim();
@@ -388,24 +548,24 @@ async function geocodeAddress(address, cache) {
         await sleep(300);
         return coords;
       }
-} catch (error) {
-  await sleep(700);
+    } catch (error) {
+      await sleep(700);
 
-  console.error("YANDEX GEOCODER ERROR:", {
-    query,
-    error
-  });
+      console.error("YANDEX GEOCODER ERROR:", {
+        query,
+        error
+      });
 
-  const message =
-    error?.message ||
-    error?.name ||
-    String(error);
+      const message =
+        error?.message ||
+        error?.name ||
+        String(error);
 
-  tried.push(`ОШИБКА на "${query}": ${message}`);
+      tried.push(`ОШИБКА на "${query}": ${message}`);
 
-  continue;
-}
-}
+      continue;
+    }
+  }
 
   throw new Error(`Адрес не найден Яндекс-геокодером. Пробовал: ${tried.join(" | ")}`);
 }
@@ -453,6 +613,13 @@ function getStatusName(status) {
 }
 
 function getPlacemarkPreset(item) {
+  const userMark = getInventoryMark(item);
+  const markPreset = getMarkPreset(userMark);
+
+  if (markPreset) {
+    return markPreset;
+  }
+
   if (item.status === "opergroup_survey") {
     return "islands#redDotIcon";
   }
@@ -478,6 +645,9 @@ function getPlacemarkPreset(item) {
 
 function makeBalloonContent(item) {
   const yandexRouteUrl = `https://yandex.ru/maps/?rtext=~${encodeURIComponent(item.address)}&rtt=auto`;
+  const key = getInventoryKey(item);
+  const safeKey = escapeJsString(key);
+  const currentMark = getInventoryMark(item);
 
   const photoBlock = item.facadePhotoUrl
     ? `<p><a href="${escapeHtml(item.facadePhotoUrl)}" target="_blank">Фото фасада</a></p>`
@@ -486,6 +656,18 @@ function makeBalloonContent(item) {
   return `
     <div class="balloon">
       <h3>${escapeHtml(item.inventoryNumber ? `№ ${item.inventoryNumber}` : item.name)}</h3>
+
+      <p><b>Моя пометка:</b> ${escapeHtml(getMarkName(currentMark))}</p>
+
+      <div class="balloon-mark-buttons">
+        <button class="mark-green" type="button" onclick="setInventoryMark('${safeKey}', 'green')">Зелёный</button>
+        <button class="mark-yellow" type="button" onclick="setInventoryMark('${safeKey}', 'yellow')">Жёлтый</button>
+        <button class="mark-red" type="button" onclick="setInventoryMark('${safeKey}', 'red')">Красный</button>
+        <button class="mark-gray" type="button" onclick="setInventoryMark('${safeKey}', 'gray')">Серый</button>
+        <button class="mark-hidden" type="button" onclick="setInventoryMark('${safeKey}', 'hidden')">Скрыть</button>
+        <button class="mark-reset" type="button" onclick="resetInventoryMark('${safeKey}')">Сбросить</button>
+      </div>
+
       <p><b>Статус:</b> ${escapeHtml(getStatusName(item.status))}</p>
       <p><b>Адрес:</b><br>${escapeHtml(item.address)}</p>
       <p><b>Организация:</b><br>${escapeHtml(item.organizationName)}</p>
@@ -524,6 +706,7 @@ async function loadInventoryMap() {
   try {
     const yandexKey = yandexKeyInput.value.trim();
     const selectedStatus = getSelectedStatus();
+    const selectedMarkFilter = markFilterInput.value;
 
     if (!yandexKey) {
       setStatus("Вставь API-ключ Яндекс.Карт.");
@@ -532,6 +715,7 @@ async function loadInventoryMap() {
 
     localStorage.setItem(LAST_YANDEX_KEY, yandexKey);
     localStorage.setItem(LAST_JSON_KEY, jsonInput.value.trim());
+    localStorage.setItem(LAST_MARK_FILTER_KEY, selectedMarkFilter);
 
     setStatus("Парсю JSON...");
     const apiData = parseJsonFromTextarea();
@@ -540,14 +724,18 @@ async function loadInventoryMap() {
     await loadYandexMaps(yandexKey);
 
     const allInventories = extractInventories(apiData);
-    const filteredInventories = filterInventoriesByStatus(allInventories, selectedStatus);
+    const statusFilteredInventories = filterInventoriesByStatus(allInventories, selectedStatus);
+    const filteredInventories = filterInventoriesByMark(statusFilteredInventories, selectedMarkFilter);
 
     if (!filteredInventories.length) {
       setStatus(
-        `Инвентаризации с таким статусом не найдены.\n\n` +
-        `Выбранный статус: ${selectedStatus || "Все статусы"}\n\n` +
-        `Всего адресов в JSON: ${allInventories.length}\n\n` +
-        `Статусы в JSON:\n${makeStatusStats(allInventories)}`
+        `Инвентаризации с такими фильтрами не найдены.\n\n` +
+        `Выбранный status: ${selectedStatus || "Все статусы"}\n` +
+        `Фильтр пометок: ${selectedMarkFilter || "Все, включая скрытые"}\n\n` +
+        `Всего адресов в JSON: ${allInventories.length}\n` +
+        `После status-фильтра: ${statusFilteredInventories.length}\n\n` +
+        `Статусы в JSON:\n${makeStatusStats(allInventories)}\n\n` +
+        `Мои пометки после status-фильтра:\n${makeMarkStats(statusFilteredInventories)}`
       );
       return;
     }
@@ -561,8 +749,11 @@ async function loadInventoryMap() {
     setStatus(
       `Всего адресов в JSON: ${allInventories.length}\n` +
       `Фильтр status: ${selectedStatus || "Все статусы"}\n` +
-      `После фильтра: ${filteredInventories.length}\n\n` +
+      `После status-фильтра: ${statusFilteredInventories.length}\n` +
+      `Фильтр пометок: ${selectedMarkFilter || "Все, включая скрытые"}\n` +
+      `После фильтра пометок: ${filteredInventories.length}\n\n` +
       `Статусы в JSON:\n${makeStatusStats(allInventories)}\n\n` +
+      `Мои пометки после status-фильтра:\n${makeMarkStats(statusFilteredInventories)}\n\n` +
       `Начинаю геокодинг через Яндекс...`
     );
 
@@ -585,7 +776,7 @@ async function loadInventoryMap() {
         const placemark = new window.ymaps.Placemark(
           coords,
           {
-            hintContent: `${title} — ${getStatusName(item.status)}`,
+            hintContent: `${title} — ${getStatusName(item.status)} — ${getMarkName(getInventoryMark(item))}`,
             balloonContent: makeBalloonContent(item),
             clusterCaption: title
           },
@@ -606,7 +797,9 @@ async function loadInventoryMap() {
         setStatus(
           `Всего адресов в JSON: ${allInventories.length}\n` +
           `Фильтр status: ${selectedStatus || "Все статусы"}\n` +
-          `После фильтра: ${filteredInventories.length}\n` +
+          `После status-фильтра: ${statusFilteredInventories.length}\n` +
+          `Фильтр пометок: ${selectedMarkFilter || "Все, включая скрытые"}\n` +
+          `После фильтра пометок: ${filteredInventories.length}\n` +
           `Обработано: ${i + 1}/${filteredInventories.length}\n` +
           `Метки готовы: ${placemarks.length}\n` +
           `Ошибки геокодинга: ${failed.length}`
@@ -627,10 +820,13 @@ async function loadInventoryMap() {
       `Готово.\n` +
       `Всего адресов в JSON: ${allInventories.length}\n` +
       `Фильтр status: ${selectedStatus || "Все статусы"}\n` +
-      `После фильтра: ${filteredInventories.length}\n` +
+      `После status-фильтра: ${statusFilteredInventories.length}\n` +
+      `Фильтр пометок: ${selectedMarkFilter || "Все, включая скрытые"}\n` +
+      `После фильтра пометок: ${filteredInventories.length}\n` +
       `Добавлено меток: ${placemarks.length}\n` +
       `Не удалось геокодировать: ${failed.length}\n\n` +
-      `Статусы в JSON:\n${makeStatusStats(allInventories)}`;
+      `Статусы в JSON:\n${makeStatusStats(allInventories)}\n\n` +
+      `Мои пометки после status-фильтра:\n${makeMarkStats(statusFilteredInventories)}`;
 
     if (failed.length) {
       finalText += "\n\nПроблемные адреса:\n";
